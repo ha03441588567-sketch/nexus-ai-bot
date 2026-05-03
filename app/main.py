@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-from app.handlers.chat import (
+from handlers.chat import (
     handle_start, handle_chat, 
     handle_price, handle_signal,
     handle_support, handle_reset
