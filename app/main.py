@@ -10,16 +10,31 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 async def send(chat_id, text):
     async with httpx.AsyncClient() as c:
-        await c.post(f"{BASE_URL}/sendMessage", json={"chat_id": chat_id, "text": text})
+        await c.post(f"{BASE_URL}/sendMessage", 
+            json={"chat_id": chat_id, "text": text})
 
 async def ask_claude(text):
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(
             "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": API_KEY, "anthropic-version": "2023-06-01"},
-            json={"model": "claude-haiku-4-5-20251001", "max_tokens": 500, "messages": [{"role": "user", "content": text}]}
+            headers={
+                "x-api-key": API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 500,
+                "messages": [{"role": "user", "content": text}]
+            }
         )
-        return r.json()["content"][0]["text"]
+        data = r.json()
+        if "content" in data:
+            return data["content"][0]["text"]
+        elif "error" in data:
+            return f"Error: {data['error']['message']}"
+        else:
+            return f"Unexpected response: {str(data)}"
 
 @app.get("/health")
 async def health():
