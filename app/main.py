@@ -1,59 +1,41 @@
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-import logging
-from app.handlers.chat import (
-handle_start, handle_chat, 
-    handle_price, handle_signal,
-    handle_support, handle_reset
-)
+import httpx
+import os
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI()
 
-app = FastAPI(title="NEXUS AI Bot")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+async def send(chat_id, text):
+    async with httpx.AsyncClient() as c:
+        await c.post(f"{BASE_URL}/sendMessage", json={"chat_id": chat_id, "text": text})
+
+async def ask_claude(text):
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": API_KEY, "anthropic-version": "2023-06-01"},
+            json={"model": "claude-haiku-4-5-20251001", "max_tokens": 500, "messages": [{"role": "user", "content": text}]}
+        )
+        return r.json()["content"][0]["text"]
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok"}
 
 @app.post("/webhook/telegram")
-async def telegram_webhook(request: Request):
-    update = await request.json()
-    logger.info(f"Update received: {update}")
-    
-    msg = update.get("message", {})
-    if not msg:
-        return {"ok": True}
-    
-    chat_id = msg["chat"]["id"]
-    user_id = msg["from"]["id"]
-    name = msg["from"].get("first_name", "User")
+async def webhook(request: Request):
+    data = await request.json()
+    msg = data.get("message", {})
+    chat_id = msg.get("chat", {}).get("id")
     text = msg.get("text", "")
-    
+    if not chat_id or not text:
+        return {"ok": True}
     if text == "/start":
-        await handle_start(chat_id, name)
-    elif text.startswith("/price "):
-        coin = text.split(" ")[1]
-        await handle_price(chat_id, coin)
-    elif text.startswith("/signal "):
-        coin = text.split(" ")[1]
-        await handle_signal(chat_id, coin)
-    elif text.startswith("/support "):
-        issue = text[9:]
-        await handle_support(chat_id, user_id, issue)
-    elif text == "/reset":
-        await handle_reset(chat_id, user_id)
-    elif text.startswith("/ask "):
-        question = text[5:]
-        await handle_chat(chat_id, user_id, question)
+        await send(chat_id, "👋 Salam! Main NEXUS AI Bot hun! Kuch bhi pucho!")
     else:
-        await handle_chat(chat_id, user_id, text)
-    
+        reply = await ask_claude(text)
+        await send(chat_id, reply)
     return {"ok": True}
